@@ -3,11 +3,13 @@
 // Why this file exists:
 //  1. No top-level await — it crashes ESM entry files on Hostinger's Passenger setup.
 //  2. Hostinger assigns no PORT, so we listen on the plausible ones and forward
-//     to SillyTavern on an internal port. The log tells us which one is real.
-//  3. Hostinger mirrors public/ into public_html and serves it with LiteSpeed,
-//     bypassing Node. That is fine for every file EXCEPT lib.js, which must be
-//     the compiled webpack bundle, not the source. We delete the stale source
-//     copy so that request falls through to Node, which serves the real bundle.
+//     to SillyTavern on an internal port.
+//  3. LiteSpeed sits in front of Node, serves stale cached copies of Node
+//     responses, and bypasses basic auth on anything it has cached. We disable
+//     cache lookup in .htaccess on every boot.
+//  4. Hostinger mirrors public/ into public_html. That is fine for every file
+//     except lib.js, which must be the compiled bundle, not the source. We
+//     delete the stale source copy so the request falls through to Node.
 
 const net = require('node:net');
 const path = require('node:path');
@@ -75,8 +77,39 @@ function startFront(target) {
 }
 
 /**
- * Deletes public_html/lib.js when it is the small un-bundled source file, so the
- * request falls through to Node and the webpack middleware serves the real bundle.
+ * Disables LiteSpeed cache lookup.
+ * LiteSpeed otherwise serves stale copies of Node responses, ignores file
+ * changes on disk, and bypasses basic auth on anything it has already cached.
+ * @param {string} dataRoot SillyTavern data root.
+ */
+function disableLiteSpeedCache(dataRoot) {
+    const htaccess = path.join(path.resolve(dataRoot, '..'), 'public_html', '.htaccess');
+
+    try {
+        let content = '';
+        if (fs.existsSync(htaccess)) {
+            content = fs.readFileSync(htaccess, 'utf8');
+        }
+
+        if (content.includes('CacheLookup off')) {
+            console.log('[boot] LiteSpeed cache already disabled');
+            return;
+        }
+
+        fs.writeFileSync(
+            htaccess,
+            '<IfModule LiteSpeed>\nCacheLookup off\n</IfModule>\n' + content,
+        );
+        console.log('[boot] LITESPEED CACHE DISABLED via .htaccess');
+    } catch (e) {
+        console.error('[boot] htaccess patch failed:', e.message);
+    }
+}
+
+/**
+ * Deletes public_html/lib.js when it is the small un-bundled source file, so
+ * the request falls through to Node and the webpack middleware serves the real
+ * compiled bundle.
  * @param {string} dataRoot SillyTavern data root.
  */
 function removeStaleLib(dataRoot) {
@@ -122,6 +155,7 @@ function removeStaleLib(dataRoot) {
     console.log('[boot] dataRoot =', cliArgs.dataRoot);
 
     [...targets].forEach(startFront);
+    disableLiteSpeedCache(cliArgs.dataRoot);
     removeStaleLib(cliArgs.dataRoot);
 
     await import('./src/server-main.js');
