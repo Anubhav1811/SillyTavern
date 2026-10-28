@@ -4,12 +4,10 @@
 //  1. No top-level await — it crashes ESM entry files on Hostinger's Passenger setup.
 //  2. Hostinger assigns no PORT, so we listen on the plausible ones and forward
 //     to SillyTavern on an internal port.
-//  3. LiteSpeed sits in front of Node, serves stale cached copies of Node
-//     responses, and bypasses basic auth on anything it has cached. We disable
-//     cache lookup in .htaccess on every boot.
-//  4. Hostinger mirrors public/ into public_html. That is fine for every file
-//     except lib.js, which must be the compiled bundle, not the source. We
-//     delete the stale source copy so the request falls through to Node.
+//  3. Passenger serves the app's public/ directory as static files, ahead of Node.
+//     That is fine for everything except lib.js, which must be the compiled
+//     bundle rather than the source. We copy the webpack output over it.
+//  4. LiteSpeed caches Node responses; we keep cache lookup off.
 
 const net = require('node:net');
 const path = require('node:path');
@@ -77,69 +75,94 @@ function startFront(target) {
 }
 
 /**
- * Disables LiteSpeed cache lookup.
- * LiteSpeed otherwise serves stale copies of Node responses, ignores file
- * changes on disk, and bypasses basic auth on anything it has already cached.
+ * Copies the compiled webpack bundle over every public/lib.js that gets served
+ * statically. Watches for a while so the fresh compile is picked up too.
+ * @param {string} serverDirectory SillyTavern install directory.
  * @param {string} dataRoot SillyTavern data root.
  */
-function disableLiteSpeedCache(dataRoot) {
-    const htaccess = path.join(path.resolve(dataRoot, '..'), 'public_html', '.htaccess');
+function syncBundle(serverDirectory, dataRoot) {
+    const wpRoot = path.join(dataRoot, '_webpack');
+    const dests = [
+        path.join(serverDirectory, 'public', 'lib.js'),
+        path.join(path.resolve(dataRoot, '..'), 'public_html', 'lib.js'),
+    ];
 
-    try {
-        let content = '';
-        if (fs.existsSync(htaccess)) {
-            content = fs.readFileSync(htaccess, 'utf8');
+    let ticks = 0;
+    console.log('[boot] watching for bundle');
+
+    const timer = setInterval(() => {
+        if (ticks++ > 375) {
+            console.log('[boot] stopped watching for bundle');
+            return clearInterval(timer);
         }
 
-        if (content.includes('CacheLookup off')) {
-            console.log('[boot] LiteSpeed cache already disabled');
-            return;
-        }
+        let dirs = [];
+        try {
+            dirs = fs.readdirSync(wpRoot, { withFileTypes: true })
+                .filter((d) => d.isDirectory()).map((d) => d.name);
+        } catch { return; }
 
-        fs.writeFileSync(
-            htaccess,
-            '<IfModule LiteSpeed>\nCacheLookup off\n</IfModule>\n' + content,
-        );
-        console.log('[boot] LITESPEED CACHE DISABLED via .htaccess');
-    } catch (e) {
-        console.error('[boot] htaccess patch failed:', e.message);
-    }
+        for (const d of dirs) {
+            const src = path.join(wpRoot, d, 'output', 'lib.js');
+            let stat;
+            try {
+                stat = fs.statSync(src);
+            } catch { continue; }
+            if (stat.size < 50000) continue;
+
+            for (const dest of dests) {
+                try {
+                    let cur = 0;
+                    try { cur = fs.statSync(dest).size; } catch { /* missing */ }
+                    if (cur === stat.size) continue;
+                    fs.copyFileSync(src, dest);
+                    console.log('[boot] BUNDLE COPIED', stat.size, 'bytes ->', dest);
+                } catch (e) {
+                    console.error('[boot] copy to', dest, 'failed:', e.message);
+                }
+            }
+        }
+    }, 400);
 }
 
+const HT_BEGIN = '# --- ST-BOOT-BEGIN ---';
+const HT_END = '# --- ST-BOOT-END ---';
+
 /**
- * Deletes public_html/lib.js when it is the small un-bundled source file, so
- * the request falls through to Node and the webpack middleware serves the real
- * compiled bundle.
+ * Managed block in public_html/.htaccess: disables LiteSpeed cache lookup and
+ * forces revalidation so nothing goes stale.
  * @param {string} dataRoot SillyTavern data root.
  */
-function removeStaleLib(dataRoot) {
-    const publicHtml = path.join(path.resolve(dataRoot, '..'), 'public_html');
-    const target = path.join(publicHtml, 'lib.js');
+function patchHtaccess(dataRoot) {
+    const htaccess = path.join(path.resolve(dataRoot, '..'), 'public_html', '.htaccess');
 
+    let content = '';
     try {
-        fs.writeFileSync(path.join(publicHtml, '__probe.txt'), 'PROBE_OK_' + Date.now());
-        console.log('[boot] probe written');
+        if (fs.existsSync(htaccess)) content = fs.readFileSync(htaccess, 'utf8');
     } catch (e) {
-        console.error('[boot] probe write failed:', e.message);
+        console.error('[boot] htaccess read failed:', e.message);
     }
 
+    const begin = content.indexOf(HT_BEGIN);
+    const end = content.indexOf(HT_END);
+    if (begin !== -1 && end !== -1) {
+        content = content.slice(0, begin) + content.slice(end + HT_END.length);
+    }
+
+    const block = [
+        HT_BEGIN,
+        '<IfModule LiteSpeed>',
+        'CacheLookup off',
+        '</IfModule>',
+        HT_END,
+        '',
+    ].join('\n');
+
     try {
-        if (!fs.existsSync(target)) {
-            console.log('[boot] no lib.js in public_html — Node will serve it');
-            return;
-        }
-
-        const size = fs.statSync(target).size;
-
-        if (size > 50000) {
-            console.log('[boot] lib.js already looks bundled (' + size + ' bytes) — leaving it');
-            return;
-        }
-
-        fs.rmSync(target, { force: true });
-        console.log('[boot] REMOVED stale source lib.js (' + size + ' bytes) — Node will serve the bundle');
+        fs.writeFileSync(htaccess, block + content.trimStart());
+        console.log('[boot] htaccess patched');
     } catch (e) {
-        console.error('[boot] remove failed:', e.message);
+        console.error('[boot] htaccess patch failed:', e.message);
     }
 }
 
@@ -155,8 +178,8 @@ function removeStaleLib(dataRoot) {
     console.log('[boot] dataRoot =', cliArgs.dataRoot);
 
     [...targets].forEach(startFront);
-    disableLiteSpeedCache(cliArgs.dataRoot);
-    removeStaleLib(cliArgs.dataRoot);
+    patchHtaccess(cliArgs.dataRoot);
+    syncBundle(serverDirectory, cliArgs.dataRoot);
 
     await import('./src/server-main.js');
     console.log('[boot] server-main loaded');
