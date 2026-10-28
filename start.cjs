@@ -1,4 +1,14 @@
-// start.cjs
+// start.cjs — Hostinger entry point for SillyTavern.
+//
+// Why this file exists:
+//  1. No top-level await — it crashes ESM entry files on Hostinger's Passenger setup.
+//  2. Hostinger assigns no PORT, so we listen on the plausible ones and forward
+//     to SillyTavern on an internal port. The log tells us which one is real.
+//  3. Hostinger mirrors public/ into public_html and serves it with LiteSpeed,
+//     bypassing Node. That is fine for every file EXCEPT lib.js, which must be
+//     the compiled webpack bundle, not the source. We delete the stale source
+//     copy so that request falls through to Node, which serves the real bundle.
+
 const net = require('node:net');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -11,72 +21,93 @@ const targets = new Set();
 if (assigned) targets.add(assigned);
 for (const p of ['3000', '8000', '8080', '5000']) targets.add(p);
 
-console.log('[boot] PORT =', JSON.stringify(assigned), '| socket =', isSocket, '| targets =', [...targets].join(','));
+console.log(
+    '[boot] PORT =', JSON.stringify(assigned),
+    '| socket =', isSocket,
+    '| targets =', [...targets].join(','),
+    '| stPort =', ST_PORT,
+);
 
 process.env.SILLYTAVERN_PORT = String(ST_PORT);
 process.env.SILLYTAVERN_LISTEN = 'true';
 
+/**
+ * Front listener: accepts the public connection and pipes it to SillyTavern,
+ * retrying upstream while ST compiles its frontend.
+ * @param {string} target Port or socket path to listen on.
+ */
 function startFront(target) {
     const server = net.createServer((client) => {
         console.log('[boot] HIT on front', target);
+
         let pending = [];
         let live = false;
         let tries = 0;
+
         const attempt = () => {
             const up = net.connect(ST_PORT, '127.0.0.1');
+
             up.on('connect', () => {
                 live = true;
-                pending.forEach((c) => up.write(c));
+                pending.forEach((chunk) => up.write(chunk));
                 pending = [];
                 client.pipe(up);
                 up.pipe(client);
             });
+
             up.on('error', () => {
                 up.destroy();
-                if (!live && tries++ < 400) setTimeout(attempt, 250);
-                else if (!live) client.destroy();
+                if (!live && tries++ < 400) {
+                    setTimeout(attempt, 250);
+                } else if (!live) {
+                    client.destroy();
+                }
             });
         };
-        client.on('data', (c) => { if (!live) pending.push(c); });
+
+        client.on('data', (chunk) => { if (!live) pending.push(chunk); });
         client.on('error', () => {});
         attempt();
     });
+
     server.on('error', (e) => console.error('[boot] front', target, 'failed:', e.code || e.message));
     server.listen(target, () => console.log('[boot] FRONT LISTENING on', target));
 }
 
-// LiteSpeed serves public_html/lib.js (the un-bundled source) ahead of Node.
-// Overwrite it with the real webpack bundle once the compiler emits it.
-function syncBundle(dataRoot) {
+/**
+ * Deletes public_html/lib.js when it is the small un-bundled source file, so the
+ * request falls through to Node and the webpack middleware serves the real bundle.
+ * @param {string} dataRoot SillyTavern data root.
+ */
+function removeStaleLib(dataRoot) {
     const publicHtml = path.join(path.resolve(dataRoot, '..'), 'public_html');
-    const wpRoot = path.join(dataRoot, '_webpack');
-    const dest = path.join(publicHtml, 'lib.js');
-    let ticks = 0;
+    const target = path.join(publicHtml, 'lib.js');
 
-    console.log('[boot] watching for bundle, target =', dest);
+    try {
+        fs.writeFileSync(path.join(publicHtml, '__probe.txt'), 'PROBE_OK_' + Date.now());
+        console.log('[boot] probe written');
+    } catch (e) {
+        console.error('[boot] probe write failed:', e.message);
+    }
 
-    const timer = setInterval(() => {
-        if (ticks++ > 300) {
-            console.error('[boot] gave up waiting for bundle');
-            return clearInterval(timer);
+    try {
+        if (!fs.existsSync(target)) {
+            console.log('[boot] no lib.js in public_html — Node will serve it');
+            return;
         }
-        let dirs = [];
-        try {
-            dirs = fs.readdirSync(wpRoot, { withFileTypes: true })
-                .filter((d) => d.isDirectory()).map((d) => d.name);
-        } catch { return; }
 
-        for (const d of dirs) {
-            const src = path.join(wpRoot, d, 'output', 'lib.js');
-            try {
-                const st = fs.statSync(src);
-                if (st.size < 50000) continue;
-                fs.copyFileSync(src, dest);
-                console.log('[boot] BUNDLE SYNCED', st.size, 'bytes ->', dest);
-                return clearInterval(timer);
-            } catch { /* not there yet */ }
+        const size = fs.statSync(target).size;
+
+        if (size > 50000) {
+            console.log('[boot] lib.js already looks bundled (' + size + ' bytes) — leaving it');
+            return;
         }
-    }, 400);
+
+        fs.rmSync(target, { force: true });
+        console.log('[boot] REMOVED stale source lib.js (' + size + ' bytes) — Node will serve the bundle');
+    } catch (e) {
+        console.error('[boot] remove failed:', e.message);
+    }
 }
 
 (async () => {
@@ -91,7 +122,7 @@ function syncBundle(dataRoot) {
     console.log('[boot] dataRoot =', cliArgs.dataRoot);
 
     [...targets].forEach(startFront);
-    syncBundle(cliArgs.dataRoot);
+    removeStaleLib(cliArgs.dataRoot);
 
     await import('./src/server-main.js');
     console.log('[boot] server-main loaded');
