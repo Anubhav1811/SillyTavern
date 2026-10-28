@@ -1,13 +1,50 @@
-// start.cjs — Hostinger entry. No top-level await. Handles TCP port or socket.
+// start.cjs — front listeners on candidate ports, ST behind them.
 const net = require('node:net');
 
 const assigned = process.env.PORT;
 const isSocket = !!assigned && !/^\d+$/.test(assigned);
-const targetPort = isSocket ? 8000 : (assigned || 8000);
+const ST_PORT = 8765;
 
-console.log('[boot] PORT env =', JSON.stringify(assigned), '| mode =', isSocket ? 'SOCKET' : 'TCP');
+const targets = new Set();
+if (assigned) targets.add(assigned);
+for (const p of ['3000', '8000', '8080', '5000']) targets.add(p);
 
-process.env.SILLYTAVERN_PORT = String(targetPort);
+console.log('[boot] PORT env =', JSON.stringify(assigned), '| socket =', isSocket, '| targets =', [...targets].join(','), '| stPort =', ST_PORT);
+
+process.env.SILLYTAVERN_PORT = String(ST_PORT);
+process.env.SILLYTAVERN_LISTEN = 'true';
+
+function startFront(target) {
+    const server = net.createServer((client) => {
+        console.log('[boot] HIT on front', target);
+        let pending = [];
+        let live = false;
+        let tries = 0;
+
+        const attempt = () => {
+            const up = net.connect(ST_PORT, '127.0.0.1');
+            up.on('connect', () => {
+                live = true;
+                pending.forEach((c) => up.write(c));
+                pending = [];
+                client.pipe(up);
+                up.pipe(client);
+            });
+            up.on('error', () => {
+                up.destroy();
+                if (!live && tries++ < 400) setTimeout(attempt, 250);
+                else if (!live) client.destroy();
+            });
+        };
+
+        client.on('data', (c) => { if (!live) pending.push(c); });
+        client.on('error', () => {});
+        attempt();
+    });
+
+    server.on('error', (e) => console.error('[boot] front', target, 'failed:', e.code || e.message));
+    server.listen(target, () => console.log('[boot] FRONT LISTENING on', target));
+}
 
 (async () => {
     const { CommandLineParser } = await import('./src/command-line.js');
@@ -20,19 +57,10 @@ process.env.SILLYTAVERN_PORT = String(targetPort);
 
     console.log('[boot] dataRoot =', cliArgs.dataRoot, '| port =', cliArgs.port, '| listen =', cliArgs.listen);
 
-    await import('./src/server-main.js');
+    [...targets].forEach(startFront);
 
-    if (isSocket) {
-        const bridge = net.createServer((sock) => {
-            const up = net.connect(targetPort, '127.0.0.1');
-            sock.pipe(up).pipe(sock);
-            sock.on('error', () => up.destroy());
-            up.on('error', () => sock.destroy());
-        });
-        setTimeout(() => {
-            bridge.listen(assigned, () => console.log('[boot] socket bridge live on', assigned));
-        }, 1500);
-    }
+    await import('./src/server-main.js');
+    console.log('[boot] server-main loaded');
 })().catch((err) => {
     console.error('[boot] FATAL:', err);
     process.exit(1);
