@@ -47,7 +47,7 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
 #timer{font-size:13px;color:#9a9aa8;margin-top:4px;font-variant-numeric:tabular-nums}
 #state{font-size:12px;color:#ff8ab4;margin-top:8px;height:16px}
 #wave{display:flex;align-items:center;gap:3.5px;height:46px}
-#wave i{width:3.5px;border-radius:3px;background:linear-gradient(#ff4d8d,#ff8ab4);height:8px;opacity:.5;transition:height .12s,opacity .12s}
+#wave i{width:3.5px;border-radius:3px;background:linear-gradient(#ff4d8d,#ff8ab4);height:8px;opacity:.5}
 #wave.live i{animation:eq 1s infinite ease-in-out}
 @keyframes eq{0%,100%{height:8px;opacity:.5}50%{height:38px;opacity:1}}
 .callbtns{display:flex;gap:22px;align-items:center}
@@ -210,16 +210,42 @@ async function makeImage(){
   }catch(e){ty.remove();addBubble('her','⚠ '+e.message.slice(0,140));}
 }
 
-function recordChunk(ms){
+// --- speech capture with silence detection ---
+function recordChunk(){
   return new Promise(async resolve=>{
     let stream;
     try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
     catch{ $('state').textContent='mic blocked'; resolve(''); return; }
+
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const an=ctx.createAnalyser();
+    an.fftSize=1024;
+    ctx.createMediaStreamSource(stream).connect(an);
+    const buf=new Uint8Array(an.fftSize);
+
     const rec=new MediaRecorder(stream,{mimeType:'audio/webm'});
-    const chunks=[];
-    rec.ondataavailable=e=>chunks.push(e.data);
+    const chunks=[]; rec.ondataavailable=e=>chunks.push(e.data);
+
+    const t0=Date.now();
+    let spoke=false, quiet=0, closed=false;
+    const stopNow=()=>{ if(closed)return; closed=true; if(rec.state==='recording')rec.stop(); };
+
+    const iv=setInterval(()=>{
+      an.getByteTimeDomainData(buf);
+      let sum=0;
+      for(let i=0;i<buf.length;i++){ const x=(buf[i]-128)/128; sum+=x*x; }
+      const rms=Math.sqrt(sum/buf.length);
+      if(rms>0.02){ spoke=true; quiet=0; }
+      else if(spoke){ quiet+=100; }
+      const el=Date.now()-t0;
+      if(spoke && quiet>700 && el>1200) stopNow();
+      if(el>12000) stopNow();
+    },100);
+
     rec.onstop=async()=>{
+      clearInterval(iv);
       stream.getTracks().forEach(t=>t.stop());
+      try{ await ctx.close(); }catch{}
       const blob=new Blob(chunks,{type:'audio/webm'});
       const fd=new FormData(); fd.append('file','v.webm'); fd.append('model','whisper-large-v3');
       try{
@@ -229,23 +255,27 @@ function recordChunk(ms){
         catch{ resolve(''); }
       }catch{ resolve(''); }
     };
+
     rec.start();
-    setTimeout(()=>{ if(rec.state==='recording')rec.stop(); },ms);
   });
 }
 
 async function callTurn(){
   if(!inCall)return;
-  $('state').textContent='listening…';
-  const text = muted ? await new Promise(r=>setTimeout(()=>r(''),1200)) : await recordChunk(4000);
-  if(!inCall)return;
-  if(text.trim()){
-    $('inp').value=text;
-    $('state').textContent='thinking…';
-    await send();
-    $('state').textContent='';
+  if(muted){ $('state').textContent='muted'; await new Promise(r=>setTimeout(r,1200)); }
+  else{
+    $('state').textContent='listening…';
+    const text=await recordChunk();
+    if(!inCall)return;
+    if(text.trim()){
+      $('inp').value=text;
+      $('state').textContent='thinking…';
+      await send();
+    }
   }
-  loopTimer=setTimeout(callTurn,500);
+  if(!inCall)return;
+  $('state').textContent='';
+  loopTimer=setTimeout(callTurn,450);
 }
 
 function startCall(){
