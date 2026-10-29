@@ -1,7 +1,9 @@
 // venice-shim.mjs
-// Mounts A1111-compatible routes at the FRONT of ST's express stack.
-// Uses plain Node response methods so it does not depend on express's init layer.
-const KEY = 'VENICE_ADMIN_KEY_AqeenznCs6t3TLWMUzd_3BFTTmagiPpWaPgEcMQjhi';
+// A1111-compatible routes, mounted at the FRONT of ST's express stack.
+// Plain Node response methods, so no dependency on express's init layer.
+import express from 'express';
+
+const KEY = 'PASTE_YOUR_VENICE_KEY_HERE';
 const MODEL = 'venice-sd35';
 
 function send(res, code, obj) {
@@ -71,58 +73,27 @@ async function txt2img(req, res) {
     send(res, 200, { images: images, parameters: {}, info: '{}' });
 }
 
-function handler(req, res, next) {
-    const path = req.url.split('?')[0];
-
-    if (req.method === 'GET' && path === '/sdapi/v1/options') {
-        send(res, 200, {});
-        return;
-    }
-
-    if (req.method === 'GET' && path === '/sdapi/v1/progress') {
-        send(res, 200, { progress: 1, state: {} });
-        return;
-    }
-
-    if (req.method === 'GET' && path === '/sdapi/v1/sd-models') {
-        send(res, 200, [{ title: MODEL, model_name: MODEL, hash: null, sha256: null }]);
-        return;
-    }
-
-    if (req.method === 'GET' && path === '/sdapi/v1/samplers') {
-        send(res, 200, [{ name: 'Euler a' }, { name: 'DPM++ 2M Karras' }]);
-        return;
-    }
-
-    if (req.method === 'GET' && path === '/sdapi/v1/schedulers') {
-        send(res, 200, [{ name: 'Automatic' }, { name: 'Karras' }]);
-        return;
-    }
-
-    if (req.method === 'POST' && path === '/sdapi/v1/txt2img') {
-        txt2img(req, res);
-        return;
-    }
-
-    next();
-}
-
 export function mountVeniceShim(app) {
-    const router = app._router || app.router;
-    if (!router || !Array.isArray(router.stack)) {
-        console.error('[venice-shim] no router stack found');
-        return;
-    }
+    const router = express.Router();
 
-    router.stack.unshift({
-        name: 'veniceShim',
-        handle: handler,
-        params: undefined,
-        path: undefined,
-        keys: [],
-        route: undefined,
-        method: undefined,
-    });
+    router.get('/sdapi/v1/options', (req, res) => send(res, 200, {}));
+    router.get('/sdapi/v1/progress', (req, res) => send(res, 200, { progress: 1, state: {} }));
+    router.get('/sdapi/v1/sd-models', (req, res) =>
+        send(res, 200, [{ title: MODEL, model_name: MODEL, hash: null, sha256: null }])
+    );
+    router.get('/sdapi/v1/samplers', (req, res) =>
+        send(res, 200, [{ name: 'Euler a' }, { name: 'DPM++ 2M Karras' }])
+    );
+    router.get('/sdapi/v1/schedulers', (req, res) =>
+        send(res, 200, [{ name: 'Automatic' }, { name: 'Karras' }])
+    );
+    router.post('/sdapi/v1/txt2img', (req, res) => { txt2img(req, res); });
+
+    app.use(router);
+
+    const stack = (app._router || app.router).stack;
+    const layer = stack.pop();
+    stack.unshift(layer);
 
     console.log('[venice-shim] routes attached');
 }
