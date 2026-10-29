@@ -24,7 +24,7 @@ header{display:flex;align-items:center;gap:10px;padding:14px 14px 12px;border-bo
 .me{align-self:flex-end;background:linear-gradient(135deg,#ff4d8d,#e01f66);color:#fff;border-bottom-right-radius:6px}
 .her+.me,.me+.her{margin-top:8px}
 .b img{display:block;width:100%;border-radius:12px;margin-bottom:6px}
-.say{display:block;margin-top:6px;font-size:11px;color:#ff8ab4;letter-spacing:.03em}
+.say{display:block;margin-top:6px;font-size:11px;color:#ff8ab4}
 .typing{align-self:flex-start;background:#16161f;border:1px solid #21212b;border-radius:18px;padding:13px;display:flex;gap:4px}
 .typing i{width:6px;height:6px;border-radius:50%;background:#6a6a7a;animation:bl 1.2s infinite}
 .typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
@@ -40,6 +40,19 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
 #empty{padding:40px 20px;text-align:center;color:#7c7c8a;font-size:14px;line-height:1.6}
 #rec{width:34px;height:34px;border-radius:50%;background:#15151d;border:1px solid #23232e;color:#c9c9d4;display:grid;place-items:center;font-size:14px;flex:none}
 #rec.live{background:#e0263f;border-color:#e0263f;color:#fff}
+#call{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;align-items:center;justify-content:space-between;padding:64px 0 44px;background:radial-gradient(circle at 50% 32%,#2b1420,#08080c 72%)}
+#call.on{display:flex}
+.big{width:104px;height:104px;border-radius:50%;display:grid;place-items:center;font-size:34px;font-weight:600;color:#fff;box-shadow:0 0 0 8px rgba(255,61,127,.07),0 0 0 18px rgba(255,61,127,.04)}
+#cName2{font-size:20px;font-weight:600;margin-top:14px}
+#timer{font-size:13px;color:#9a9aa8;margin-top:4px;font-variant-numeric:tabular-nums}
+#state{font-size:12px;color:#ff8ab4;margin-top:8px;height:16px}
+#wave{display:flex;align-items:center;gap:3.5px;height:46px}
+#wave i{width:3.5px;border-radius:3px;background:linear-gradient(#ff4d8d,#ff8ab4);height:8px;opacity:.5;transition:height .12s,opacity .12s}
+#wave.live i{animation:eq 1s infinite ease-in-out}
+@keyframes eq{0%,100%{height:8px;opacity:.5}50%{height:38px;opacity:1}}
+.callbtns{display:flex;gap:22px;align-items:center}
+.cb{width:52px;height:52px;border-radius:50%;background:#1b1b24;border:1px solid #2a2a36;display:grid;place-items:center;color:#d5d5e0;font-size:18px}
+.cb.end{background:#e0263f;border-color:#e0263f;color:#fff;width:62px;height:62px;font-size:20px}
 </style>
 </head>
 <body>
@@ -55,7 +68,7 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
     <div class="btn" id="backBtn">‹</div>
     <div class="av" id="cAv"></div>
     <div class="meta"><div class="nm" id="cNm"></div><div class="st" id="cSt">online</div></div>
-    <div class="btn" id="spkBtn" title="Auto-speak">♪</div>
+    <div class="btn" id="callBtn">☏</div>
     <div class="btn" id="imgBtn">▣</div>
   </header>
   <div id="thread"></div>
@@ -66,15 +79,32 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
   </footer>
 </div>
 
+<div id="call">
+  <div style="display:flex;flex-direction:column;align-items:center">
+    <div class="big" id="cAv2"></div>
+    <div id="cName2"></div>
+    <div id="timer">00:00</div>
+    <div id="state"></div>
+  </div>
+  <div id="wave"></div>
+  <div class="callbtns">
+    <div class="cb" id="muteBtn">🎤</div>
+    <div class="cb end" id="endBtn">✕</div>
+    <div class="cb" id="spk2">🔊</div>
+  </div>
+</div>
+
 <script>
 const KC='candy.chars',KH='candy.hist',KS='candy.settings';
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 let chars=load(KC,[]),hist=load(KH,{}),settings=load(KS,{model:'venice-uncensored-1-2',speak:false});
-let current=null,audio=null;
+let current=null,audio=null,inCall=false,muted=false,loopTimer=null,secs=0,tick=null;
 const G=['linear-gradient(135deg,#ff4d8d,#8a1f4d)','linear-gradient(135deg,#7a5cff,#2b1a5c)','linear-gradient(135deg,#3ddc84,#12543a)','linear-gradient(135deg,#ffa53d,#8a4d12)','linear-gradient(135deg,#4db8ff,#124a7a)'];
 const grad=i=>G[i%G.length];
 const $=id=>document.getElementById(id);
+
+for(let i=0;i<26;i++){const b=document.createElement('i');b.style.animationDelay=(i*.055)+'s';$('wave').appendChild(b);}
 
 function renderHome(){
   $('list').innerHTML=''; $('empty').classList.toggle('hide',chars.length>0);
@@ -88,7 +118,8 @@ function openChat(i){
   current=i; const c=chars[i];
   $('home').classList.add('hide'); $('chatView').classList.remove('hide');
   $('cAv').style.background=grad(i); $('cAv').textContent=c.name[0].toUpperCase();
-  $('cNm').textContent=c.name; $('spkBtn').classList.toggle('on',!!settings.speak);
+  $('cAv2').style.background=grad(i); $('cAv2').textContent=c.name[0].toUpperCase();
+  $('cNm').textContent=c.name; $('cName2').textContent=c.name;
   renderThread();
 }
 function renderThread(){
@@ -144,9 +175,10 @@ async function send(){
         }catch{}
       }
     }
-  }catch(e){ty.remove();if(!bubble)addBubble('her','⚠ '+e.message.slice(0,140));return;}
+  }catch(e){ty.remove();if(!bubble)addBubble('her','⚠ '+e.message.slice(0,140));return '';}
   ty.remove();
-  if(acc){push(c.name,'assistant',acc);if(settings.speak)speak(acc);}
+  if(acc){push(c.name,'assistant',acc);if(settings.speak||inCall)speak(acc);}
+  return acc;
 }
 
 async function speak(text){
@@ -154,9 +186,12 @@ async function speak(text){
     const r=await fetch('/candy/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
     if(!r.ok)throw new Error('tts '+r.status);
     const b=await r.blob();
-    if(audio){audio.pause();}
+    if(audio)audio.pause();
     audio=new Audio(URL.createObjectURL(b));
+    audio.onplay=()=>$('wave').classList.add('live');
+    audio.onended=()=>{ if(!inCall)$('wave').classList.remove('live'); };
     await audio.play();
+    return new Promise(r=>{audio.onended=r;audio.onerror=r;});
   }catch(e){ console.warn(e.message); }
 }
 
@@ -175,30 +210,59 @@ async function makeImage(){
   }catch(e){ty.remove();addBubble('her','⚠ '+e.message.slice(0,140));}
 }
 
-let rec=null,chunks=[];
-async function toggleRec(){
-  if(rec&&rec.state==='recording'){ rec.stop(); return; }
-  try{
-    const st=await navigator.mediaDevices.getUserMedia({audio:true});
-    chunks=[]; rec=new MediaRecorder(st,{mimeType:'audio/webm'});
+function recordChunk(ms){
+  return new Promise(async resolve=>{
+    let stream;
+    try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+    catch{ $('state').textContent='mic blocked'; resolve(''); return; }
+    const rec=new MediaRecorder(stream,{mimeType:'audio/webm'});
+    const chunks=[];
     rec.ondataavailable=e=>chunks.push(e.data);
     rec.onstop=async()=>{
-      st.getTracks().forEach(t=>t.stop());
-      $('rec').classList.remove('live'); $('cSt').textContent='transcribing…';
+      stream.getTracks().forEach(t=>t.stop());
       const blob=new Blob(chunks,{type:'audio/webm'});
-      const fd=new FormData(); fd.append('file','voice.webm'); fd.append('model','whisper-large-v3');
+      const fd=new FormData(); fd.append('file','v.webm'); fd.append('model','whisper-large-v3');
       try{
         const r=await fetch('/candy/transcribe',{method:'POST',body:fd});
         const t=await r.text();
-        let txt='';
-        try{const j=JSON.parse(t);txt=j.text||(j.raw?JSON.parse(j.raw).text:'')||'';}catch{txt='';}
-        if(txt.trim()){ $('inp').value=txt.trim(); send(); }
-        else $('cSt').textContent='couldn\'t hear that';
-      }catch(e){ $('cSt').textContent='mic failed'; }
-      setTimeout(()=>{ if($('cSt').textContent!=='online')$('cSt').textContent='online'; },2200);
+        try{ const j=JSON.parse(t); resolve(j.text||(j.raw?JSON.parse(j.raw).text:'')||''); }
+        catch{ resolve(''); }
+      }catch{ resolve(''); }
     };
-    rec.start(); $('rec').classList.add('live');
-  }catch(e){ $('cSt').textContent='mic blocked'; }
+    rec.start();
+    setTimeout(()=>{ if(rec.state==='recording')rec.stop(); },ms);
+  });
+}
+
+async function callTurn(){
+  if(!inCall)return;
+  $('state').textContent='listening…';
+  const text = muted ? await new Promise(r=>setTimeout(()=>r(''),1200)) : await recordChunk(4000);
+  if(!inCall)return;
+  if(text.trim()){
+    $('inp').value=text;
+    $('state').textContent='thinking…';
+    await send();
+    $('state').textContent='';
+  }
+  loopTimer=setTimeout(callTurn,500);
+}
+
+function startCall(){
+  if(current===null)return;
+  inCall=true; muted=false; secs=0;
+  $('call').classList.add('on');
+  $('timer').textContent='00:00';
+  clearInterval(tick);
+  tick=setInterval(()=>{secs++;$('timer').textContent=String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0');},1000);
+  callTurn();
+}
+function endCall(){
+  inCall=false;
+  clearTimeout(loopTimer); clearInterval(tick);
+  if(audio){audio.pause();audio=null;}
+  $('wave').classList.remove('live');
+  $('call').classList.remove('on');
 }
 
 $('addBtn').onclick=()=>{
@@ -209,8 +273,10 @@ $('addBtn').onclick=()=>{
 $('backBtn').onclick=()=>{ $('chatView').classList.add('hide'); $('home').classList.remove('hide'); renderHome(); current=null; };
 $('sendBtn').onclick=send;
 $('imgBtn').onclick=makeImage;
-$('rec').onclick=toggleRec;
-$('spkBtn').onclick=()=>{ settings.speak=!settings.speak; save(KS,settings); $('spkBtn').classList.toggle('on',settings.speak); if(!settings.speak&&audio)audio.pause(); };
+$('callBtn').onclick=startCall;
+$('endBtn').onclick=endCall;
+$('muteBtn').onclick=()=>{ muted=!muted; $('muteBtn').style.background=muted?'#e0263f':''; };
+$('spk2').onclick=()=>{ if(audio){ if(audio.paused)audio.play(); else audio.pause(); } };
 $('inp').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();send();} });
 
 renderHome();
