@@ -15,3 +15,5 @@ try {
 } catch (error) {
     console.error('A critical error has occurred while starting the server:', error);
 }
+/* --- venice image shim --- */
+import('./venice-shim.mjs').then(m => m.mountVeniceShim(app)).catch(e => console.error('[venice-shim]', e));
