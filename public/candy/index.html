@@ -16,36 +16,36 @@ header{display:flex;align-items:center;gap:10px;padding:14px 14px 12px;border-bo
 .nm{font-weight:600;font-size:15px}
 .st{font-size:11.5px;color:#7c7c8a;margin-top:1px}
 .btn{width:34px;height:34px;border-radius:11px;background:#15151d;border:1px solid #22222c;display:grid;place-items:center;color:#c9c9d4;font-size:15px;flex:none}
+.btn.on{background:#ff4d8d;border-color:#ff4d8d;color:#fff}
 #thread{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:3px}
 .b{max-width:78%;padding:10px 13px;border-radius:18px;font-size:14.5px;animation:pop .18s ease both;word-wrap:break-word}
 @keyframes pop{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 .her{align-self:flex-start;background:#16161f;border:1px solid #21212b;border-bottom-left-radius:6px}
-.me{align-self:flex-end;background:linear-gradient(135deg,#ff4d8d,#e01f66);color:#fff;border-bottom-right-radius:6px;margin-top:8px}
+.me{align-self:flex-end;background:linear-gradient(135deg,#ff4d8d,#e01f66);color:#fff;border-bottom-right-radius:6px}
 .her+.me,.me+.her{margin-top:8px}
 .b img{display:block;width:100%;border-radius:12px;margin-bottom:6px}
+.say{display:block;margin-top:6px;font-size:11px;color:#ff8ab4;letter-spacing:.03em}
 .typing{align-self:flex-start;background:#16161f;border:1px solid #21212b;border-radius:18px;padding:13px;display:flex;gap:4px}
 .typing i{width:6px;height:6px;border-radius:50%;background:#6a6a7a;animation:bl 1.2s infinite}
 .typing i:nth-child(2){animation-delay:.18s}.typing i:nth-child(3){animation-delay:.36s}
 @keyframes bl{0%,60%,100%{opacity:.28}30%{opacity:1}}
-footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #1a1a22;background:#0b0b10;flex:none}
+footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #1a1a22;background:#0b0b10;flex:none;align-items:center}
 .field{flex:1;display:flex;align-items:center;background:#15151d;border:1px solid #23232e;border-radius:22px;padding:0 4px 0 14px;height:42px}
 .field input{flex:1;background:none;border:none;outline:none;color:#eeeef3;font-size:15px;font-family:inherit}
 .field input::placeholder{color:#5e5e6d}
 .go{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#ff4d8d,#e01f66);border:none;color:#fff;font-size:16px;display:grid;place-items:center;flex:none}
 #list{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
 .card{display:flex;gap:12px;align-items:center;background:#111118;border:1px solid #1d1d26;border-radius:16px;padding:12px}
-.card .nm{font-size:15px}.card .st{color:#6a6a7a}
 .hide{display:none!important}
 #empty{padding:40px 20px;text-align:center;color:#7c7c8a;font-size:14px;line-height:1.6}
+#rec{width:34px;height:34px;border-radius:50%;background:#15151d;border:1px solid #23232e;color:#c9c9d4;display:grid;place-items:center;font-size:14px;flex:none}
+#rec.live{background:#e0263f;border-color:#e0263f;color:#fff}
 </style>
 </head>
 <body>
 
 <div id="home">
-  <header>
-    <div class="meta"><div class="nm" style="font-size:19px">Companions</div></div>
-    <div class="btn" id="addBtn">+</div>
-  </header>
+  <header><div class="meta"><div class="nm" style="font-size:19px">Companions</div></div><div class="btn" id="addBtn">+</div></header>
   <div id="list"></div>
   <div id="empty" class="hide">No characters yet.<br>Tap + and paste a card.</div>
 </div>
@@ -54,168 +54,163 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
   <header>
     <div class="btn" id="backBtn">‹</div>
     <div class="av" id="cAv"></div>
-    <div class="meta"><div class="nm" id="cNm"></div><div class="st">online</div></div>
+    <div class="meta"><div class="nm" id="cNm"></div><div class="st" id="cSt">online</div></div>
+    <div class="btn" id="spkBtn" title="Auto-speak">♪</div>
     <div class="btn" id="imgBtn">▣</div>
   </header>
   <div id="thread"></div>
   <footer>
     <div class="field"><input id="inp" placeholder="Message…" autocomplete="off"></div>
+    <div id="rec">●</div>
     <button class="go" id="sendBtn">↑</button>
   </footer>
 </div>
 
 <script>
-const KEY_C='candy.chars', KEY_H='candy.hist', KEY_S='candy.settings';
+const KC='candy.chars',KH='candy.hist',KS='candy.settings';
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-
-let chars=load(KEY_C,[]), hist=load(KEY_H,{}), settings=load(KEY_S,{model:'venice-uncensored-1-2'});
-let current=null;
-
-const GRAD=['linear-gradient(135deg,#ff4d8d,#8a1f4d)','linear-gradient(135deg,#7a5cff,#2b1a5c)','linear-gradient(135deg,#3ddc84,#12543a)','linear-gradient(135deg,#ffa53d,#8a4d12)','linear-gradient(135deg,#4db8ff,#124a7a)'];
-const grad=i=>GRAD[i%GRAD.length];
-
+let chars=load(KC,[]),hist=load(KH,{}),settings=load(KS,{model:'venice-uncensored-1-2',speak:false});
+let current=null,audio=null;
+const G=['linear-gradient(135deg,#ff4d8d,#8a1f4d)','linear-gradient(135deg,#7a5cff,#2b1a5c)','linear-gradient(135deg,#3ddc84,#12543a)','linear-gradient(135deg,#ffa53d,#8a4d12)','linear-gradient(135deg,#4db8ff,#124a7a)'];
+const grad=i=>G[i%G.length];
 const $=id=>document.getElementById(id);
 
 function renderHome(){
-  $('list').innerHTML='';
-  $('empty').classList.toggle('hide',chars.length>0);
+  $('list').innerHTML=''; $('empty').classList.toggle('hide',chars.length>0);
   chars.forEach((c,i)=>{
-    const d=document.createElement('div');
-    d.className='card';
-    d.innerHTML=`<div class="av" style="background:${grad(i)}">${c.name[0].toUpperCase()}</div>
-      <div class="meta"><div class="nm">${c.name}</div><div class="st">${(hist[c.name]||[]).length? 'continue':'say hi'}</div></div>`;
-    d.onclick=()=>openChat(i);
-    $('list').appendChild(d);
+    const d=document.createElement('div'); d.className='card';
+    d.innerHTML=`<div class="av" style="background:${grad(i)}">${c.name[0].toUpperCase()}</div><div class="meta"><div class="nm">${c.name}</div><div class="st">${(hist[c.name]||[]).length?'continue':'say hi'}</div></div>`;
+    d.onclick=()=>openChat(i); $('list').appendChild(d);
   });
 }
-
 function openChat(i){
-  current=i;
-  const c=chars[i];
-  $('home').classList.add('hide');
-  $('chatView').classList.remove('hide');
-  $('cAv').style.background=grad(i);
-  $('cAv').textContent=c.name[0].toUpperCase();
-  $('cNm').textContent=c.name;
+  current=i; const c=chars[i];
+  $('home').classList.add('hide'); $('chatView').classList.remove('hide');
+  $('cAv').style.background=grad(i); $('cAv').textContent=c.name[0].toUpperCase();
+  $('cNm').textContent=c.name; $('spkBtn').classList.toggle('on',!!settings.speak);
   renderThread();
 }
-
 function renderThread(){
   const t=$('thread'); t.innerHTML='';
-  const h=hist[chars[current].name]||[];
-  h.forEach(m=>addBubble(m.role,m.content,false));
+  (hist[chars[current].name]||[]).forEach(m=>addBubble(m.role,m.content,false));
   t.scrollTop=t.scrollHeight;
 }
-
 function addBubble(role,text,scroll=true){
-  const b=document.createElement('div');
-  b.className='b '+(role==='user'?'me':'her');
+  const b=document.createElement('div'); b.className='b '+(role==='user'?'me':'her');
   if(text.startsWith('[img]')){
-    const img=document.createElement('img');
-    img.src=text.slice(5);
-    b.appendChild(img);
-  } else b.textContent=text;
+    const img=document.createElement('img'); img.src=text.slice(5); b.appendChild(img);
+  }else{
+    b.textContent=text;
+    if(role==='assistant'){
+      const s=document.createElement('span'); s.className='say'; s.textContent='▶ listen';
+      s.onclick=e=>{e.stopPropagation(); speak(text);};
+      b.appendChild(s);
+    }
+  }
   $('thread').appendChild(b);
   if(scroll)$('thread').scrollTop=$('thread').scrollHeight;
   return b;
 }
-
-function push(name,role,content){
-  hist[name]=hist[name]||[];
-  hist[name].push({role,content});
-  if(hist[name].length>60) hist[name]=hist[name].slice(-60);
-  save(KEY_H,hist);
-}
+function push(n,r,c){hist[n]=hist[n]||[];hist[n].push({role:r,content:c});if(hist[n].length>60)hist[n]=hist[n].slice(-60);save(KH,hist);}
 
 function buildMessages(c){
   const sys=[`You are ${c.name}. Stay in character. Write short, warm, natural messages — 1 to 3 sentences. Use *asterisks* for actions. Never narrate the user's thoughts or speech.`];
-  if(c.persona) sys.push(c.persona);
-  if(c.scenario) sys.push('Scenario: '+c.scenario);
-  const msgs=[{role:'system',content:sys.join('\n\n')}];
-  (hist[c.name]||[]).forEach(m=>msgs.push({role:m.role,content:m.content.startsWith('[img]')?'[sent an image]':m.content}));
-  return msgs;
+  if(c.persona)sys.push(c.persona);
+  if(c.scenario)sys.push('Scenario: '+c.scenario);
+  const m=[{role:'system',content:sys.join('\n\n')}];
+  (hist[c.name]||[]).forEach(x=>m.push({role:x.role,content:x.content.startsWith('[img]')?'[sent an image]':x.content}));
+  return m;
 }
 
 async function send(){
-  const inp=$('inp'); const text=inp.value.trim(); if(!text||current===null)return;
-  inp.value='';
-  const c=chars[current];
-  addBubble('user',text);
-  push(c.name,'user',text);
-
-  const ty=document.createElement('div');
-  ty.className='typing'; ty.innerHTML='<i></i><i></i><i></i>';
+  const inp=$('inp'),text=inp.value.trim(); if(!text||current===null)return;
+  inp.value=''; const c=chars[current];
+  addBubble('user',text); push(c.name,'user',text);
+  const ty=document.createElement('div'); ty.className='typing'; ty.innerHTML='<i></i><i></i><i></i>';
   $('thread').appendChild(ty); $('thread').scrollTop=$('thread').scrollHeight;
-
-  let acc=''; let bubble=null;
+  let acc='',bubble=null;
   try{
-    const r=await fetch('/candy/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:settings.model,messages:buildMessages(c)})});
-    if(!r.ok){throw new Error(await r.text())}
-
-    const rd=r.body.getReader(), dec=new TextDecoder();
+    const r=await fetch('/candy/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:settings.model,messages:buildMessages(c)})});
+    if(!r.ok)throw new Error(await r.text());
+    const rd=r.body.getReader(),dec=new TextDecoder();
     while(true){
       const {value,done}=await rd.read(); if(done)break;
       for(const line of dec.decode(value,{stream:true}).split('\n')){
         if(!line.startsWith('data: '))continue;
-        const p=line.slice(6).trim();
-        if(p==='[DONE]')continue;
-        try{
-          const j=JSON.parse(p);
-          const d=j.choices?.[0]?.delta?.content;
-          if(d){
-            acc+=d;
-            if(!bubble){ty.remove();bubble=addBubble('her','',false);}
-            bubble.textContent=acc;
-            $('thread').scrollTop=$('thread').scrollHeight;
-          }
+        const p=line.slice(6).trim(); if(p==='[DONE]')continue;
+        try{const j=JSON.parse(p);const d=j.choices?.[0]?.delta?.content;
+          if(d){acc+=d;if(!bubble){ty.remove();bubble=addBubble('her','',false);}bubble.firstChild?bubble.firstChild.textContent=acc:bubble.textContent=acc;$('thread').scrollTop=$('thread').scrollHeight;}
         }catch{}
       }
     }
-  }catch(e){
-    ty.remove();
-    if(!bubble) addBubble('her','⚠ '+e.message.slice(0,140));
-    return;
-  }
+  }catch(e){ty.remove();if(!bubble)addBubble('her','⚠ '+e.message.slice(0,140));return;}
   ty.remove();
-  if(acc) push(c.name,'assistant',acc);
+  if(acc){push(c.name,'assistant',acc);if(settings.speak)speak(acc);}
+}
+
+async function speak(text){
+  try{
+    const r=await fetch('/candy/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    if(!r.ok)throw new Error('tts '+r.status);
+    const b=await r.blob();
+    if(audio){audio.pause();}
+    audio=new Audio(URL.createObjectURL(b));
+    await audio.play();
+  }catch(e){ console.warn(e.message); }
 }
 
 async function makeImage(){
-  if(current===null)return;
-  const c=chars[current];
-  const h=hist[c.name]||[];
-  const last=[...h].reverse().find(m=>m.role==='assistant');
+  if(current===null)return; const c=chars[current];
+  const last=[...(hist[c.name]||[])].reverse().find(m=>m.role==='assistant');
   if(!last)return;
-  const ty=document.createElement('div');
-  ty.className='typing'; ty.innerHTML='<i></i><i></i><i></i>';
+  const ty=document.createElement('div'); ty.className='typing'; ty.innerHTML='<i></i><i></i><i></i>';
   $('thread').appendChild(ty); $('thread').scrollTop=$('thread').scrollHeight;
   try{
-    const r=await fetch('/candy/image',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({prompt:last.content.slice(0,400)})});
-    const j=await r.json();
-    ty.remove();
-    if(!j.images) throw new Error(j.error||'failed');
-    addBubble('assistant','[img]data:image/png;base64,'+j.images[0]);
-    push(c.name,'assistant','[img]data:image/png;base64,'+j.images[0]);
-  }catch(e){
-    ty.remove(); addBubble('her','⚠ '+e.message.slice(0,140));
-  }
+    const r=await fetch('/candy/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:last.content.slice(0,400)})});
+    const j=await r.json(); ty.remove();
+    if(!j.images)throw new Error(j.error||'failed');
+    const src='data:image/png;base64,'+j.images[0];
+    addBubble('assistant','[img]'+src); push(c.name,'assistant','[img]'+src);
+  }catch(e){ty.remove();addBubble('her','⚠ '+e.message.slice(0,140));}
+}
+
+let rec=null,chunks=[];
+async function toggleRec(){
+  if(rec&&rec.state==='recording'){ rec.stop(); return; }
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:true});
+    chunks=[]; rec=new MediaRecorder(st,{mimeType:'audio/webm'});
+    rec.ondataavailable=e=>chunks.push(e.data);
+    rec.onstop=async()=>{
+      st.getTracks().forEach(t=>t.stop());
+      $('rec').classList.remove('live'); $('cSt').textContent='transcribing…';
+      const blob=new Blob(chunks,{type:'audio/webm'});
+      const fd=new FormData(); fd.append('file','voice.webm'); fd.append('model','whisper-large-v3');
+      try{
+        const r=await fetch('/candy/transcribe',{method:'POST',body:fd});
+        const t=await r.text();
+        let txt='';
+        try{const j=JSON.parse(t);txt=j.text||(j.raw?JSON.parse(j.raw).text:'')||'';}catch{txt='';}
+        if(txt.trim()){ $('inp').value=txt.trim(); send(); }
+        else $('cSt').textContent='couldn\'t hear that';
+      }catch(e){ $('cSt').textContent='mic failed'; }
+      setTimeout(()=>{ if($('cSt').textContent!=='online')$('cSt').textContent='online'; },2200);
+    };
+    rec.start(); $('rec').classList.add('live');
+  }catch(e){ $('cSt').textContent='mic blocked'; }
 }
 
 $('addBtn').onclick=()=>{
   const raw=prompt('Paste character JSON:\n{"name":"Aria","persona":"23, warm, teasing.","scenario":"She is your neighbour."}');
   if(!raw)return;
-  try{
-    const c=JSON.parse(raw);
-    if(!c.name)throw 0;
-    chars.push(c); save(KEY_C,chars); renderHome();
-  }catch{alert('Bad JSON')}
+  try{const c=JSON.parse(raw);if(!c.name)throw 0;chars.push(c);save(KC,chars);renderHome();}catch{alert('Bad JSON')}
 };
 $('backBtn').onclick=()=>{ $('chatView').classList.add('hide'); $('home').classList.remove('hide'); renderHome(); current=null; };
 $('sendBtn').onclick=send;
 $('imgBtn').onclick=makeImage;
+$('rec').onclick=toggleRec;
+$('spkBtn').onclick=()=>{ settings.speak=!settings.speak; save(KS,settings); $('spkBtn').classList.toggle('on',settings.speak); if(!settings.speak&&audio)audio.pause(); };
 $('inp').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();send();} });
 
 renderHome();
