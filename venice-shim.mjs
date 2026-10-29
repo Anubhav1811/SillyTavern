@@ -1,10 +1,9 @@
 // venice-shim.mjs
-// A1111-compatible routes, mounted at the FRONT of ST's express stack.
-// Plain Node response methods, so no dependency on express's init layer.
 import express from 'express';
 
 const KEY = 'VENICE_INFERENCE_KEY_uESc3MG_Kbz9_eS9GXiapfq4_arrmGeiBtA3gr5LMV';
-const MODEL = 'venice-sd35';
+const DEFAULT_MODEL = 'venice-uncensored-1-2';
+const IMAGE_MODEL = 'flux-dev';
 
 function send(res, code, obj) {
     const body = JSON.stringify(obj);
@@ -25,27 +24,22 @@ function collect(req) {
     });
 }
 
-async function txt2img(req, res) {
+async function chat(req, res) {
     const body = await collect(req);
-    if (!body.prompt) {
-        send(res, 400, { error: 'prompt is required' });
-        return;
-    }
 
     let upstream;
     try {
-        upstream = await fetch('https://api.venice.ai/api/v1/image/generate', {
+        upstream = await fetch('https://api.venice.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + KEY },
             body: JSON.stringify({
-                model: MODEL,
-                prompt: body.prompt,
-                negative_prompt: body.negative_prompt || undefined,
-                width: Number(body.width) || 1024,
-                height: Number(body.height) || 1024,
-                steps: Number(body.steps) || 25,
-                cfg_scale: Number(body.cfg_scale) || 7,
-                return_binary: false,
+                model: body.model || DEFAULT_MODEL,
+                messages: body.messages || [],
+                temperature: body.temperature ?? 0.9,
+                top_p: 1,
+                max_tokens: body.max_tokens || 400,
+                stream: true,
+                venice_parameters: { include_venice_system_prompt: false },
             }),
         });
     } catch (err) {
@@ -53,45 +47,71 @@ async function txt2img(req, res) {
         return;
     }
 
-    const text = await upstream.text();
-
     if (!upstream.ok) {
-        console.error('[venice-shim] venice', upstream.status, text);
+        const text = await upstream.text();
+        console.error('[venice-shim] chat', upstream.status, text);
         send(res, upstream.status, { error: text });
         return;
     }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    for await (const chunk of upstream.body) res.write(chunk);
+    res.end();
+}
+
+async function image(req, res) {
+    const body = await collect(req);
+    if (!body.prompt) { send(res, 400, { error: 'prompt required' }); return; }
+
+    let upstream;
+    try {
+        upstream = await fetch('https://api.venice.ai/api/v1/image/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + KEY },
+            body: JSON.stringify({
+                model: body.model || IMAGE_MODEL,
+                prompt: body.prompt,
+                negative_prompt: body.negative_prompt || 'blurry, low quality, deformed',
+                width: Number(body.width) || 832,
+                height: Number(body.height) || 1216,
+                steps: 30,
+                cfg_scale: 7,
+                return_binary: false,
+            }),
+        });
+    } catch (err) { send(res, 500, { error: String(err) }); return; }
+
+    const text = await upstream.text();
+    if (!upstream.ok) { console.error('[venice-shim] image', upstream.status, text); send(res, upstream.status, { error: text }); return; }
 
     let data = {};
     try { data = JSON.parse(text); } catch { send(res, 502, { error: 'bad json' }); return; }
 
     const images = data.images || [];
-    if (!images.length) {
-        send(res, 502, { error: 'no images returned', raw: data });
-        return;
-    }
+    if (!images.length) { send(res, 502, { error: 'no images' }); return; }
 
-    send(res, 200, { images: images, parameters: {}, info: '{}' });
+    send(res, 200, { images });
 }
 
 export function mountVeniceShim(app) {
     const router = express.Router();
 
+    router.post('/candy/chat', (req, res) => { chat(req, res); });
+    router.post('/candy/image', (req, res) => { image(req, res); });
+
     router.get('/sdapi/v1/options', (req, res) => send(res, 200, {}));
     router.get('/sdapi/v1/progress', (req, res) => send(res, 200, { progress: 1, state: {} }));
-    router.get('/sdapi/v1/sd-models', (req, res) =>
-        send(res, 200, [{ title: MODEL, model_name: MODEL, hash: null, sha256: null }])
-    );
-    router.get('/sdapi/v1/samplers', (req, res) =>
-        send(res, 200, [{ name: 'Euler a' }, { name: 'DPM++ 2M Karras' }])
-    );
-    router.get('/sdapi/v1/schedulers', (req, res) =>
-        send(res, 200, [{ name: 'Automatic' }, { name: 'Karras' }])
-    );
-    router.get('/sdapi/v1/upscalers', (req, res) =>
-        send(res, 200, [{ name: 'None' }])
-    );
+    router.get('/sdapi/v1/sd-models', (req, res) => send(res, 200, [{ title: IMAGE_MODEL, model_name: IMAGE_MODEL }]));
+    router.get('/sdapi/v1/samplers', (req, res) => send(res, 200, [{ name: 'Euler a' }]));
+    router.get('/sdapi/v1/schedulers', (req, res) => send(res, 200, [{ name: 'Automatic' }]));
+    router.get('/sdapi/v1/upscalers', (req, res) => send(res, 200, [{ name: 'None' }]));
     router.get('/sdapi/v1/loras', (req, res) => send(res, 200, []));
-    router.post('/sdapi/v1/txt2img', (req, res) => { txt2img(req, res); });
 
     app.use(router);
 
