@@ -64,6 +64,10 @@ export function mountVeniceShim(app) {
     });
 
     app.use(router);
+    console.log('[venice-shim] routes attached');
+}
+
+    app.use(router);
 
     // move our layer in front of ST's 404 handler and auth middleware
     const stack = (app._router || app.router).stack;
