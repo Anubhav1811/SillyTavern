@@ -3,7 +3,7 @@
 // Plain Node response methods, so no dependency on express's init layer.
 import express from 'express';
 
-const KEY = 'PASTE_YOUR_VENICE_KEY_HERE';
+const KEY = 'VENICE_INFERENCE_KEY_uESc3MG_Kbz9_eS9GXiapfq4_arrmGeiBtA3gr5LMV';
 const MODEL = 'venice-sd35';
 
 function send(res, code, obj) {
@@ -87,6 +87,10 @@ export function mountVeniceShim(app) {
     router.get('/sdapi/v1/schedulers', (req, res) =>
         send(res, 200, [{ name: 'Automatic' }, { name: 'Karras' }])
     );
+    router.get('/sdapi/v1/upscalers', (req, res) =>
+        send(res, 200, [{ name: 'None' }])
+    );
+    router.get('/sdapi/v1/loras', (req, res) => send(res, 200, []));
     router.post('/sdapi/v1/txt2img', (req, res) => { txt2img(req, res); });
 
     app.use(router);
