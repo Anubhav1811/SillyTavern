@@ -1,0 +1,12 @@
+{
+  "name": "Companions",
+  "short_name": "Companions",
+  "start_url": "/candy/",
+  "scope": "/candy/",
+  "display": "standalone",
+  "background_color": "#08080c",
+  "theme_color": "#08080c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
