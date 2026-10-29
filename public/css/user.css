@@ -1,22 +1,107 @@
+/* ============================================
+   Companion UI skin — SillyTavern
+   ============================================ */
+
 html body{background:#08080c !important}
-#bg1,#bg_custom{background-image:none !important;opacity:1 !important}
-#top-bar{background:#08080c !important;border-bottom:1px solid #1a1a22 !important}
-#top-settings-holder .drawer-toggle{background:#15151d !important;border:1px solid #22222c !important;border-radius:11px !important}
-#character_name_pole{font-size:15px !important;font-weight:600 !important;color:#f4f4f7 !important}
+#bg1{background-image:none !important;opacity:1 !important}
+#top-settings-holder{background:#08080c !important;border-bottom:1px solid #1a1a22 !important}
+#top-bar{background:#08080c !important}
+#rm_button_selected_ch h2{font-size:15px !important;font-weight:600 !important;color:#f4f4f7 !important;letter-spacing:-0.01em !important}
 
-html body #chat{max-width:100% !important;padding:14px !important}
-html body .mes{background:none !important;border:none !important;box-shadow:none !important;padding:2px 0 !important;margin:0 !important}
-html body .mes .mes_block{padding:10px 13px !important;border-radius:18px !important;font-size:14px !important;line-height:1.45 !important}
-html body .mes[data-is-user="true"]{flex-direction:row-reverse !important}
-html body .mes[data-is-user="true"] .mes_block{background:linear-gradient(135deg,#ff4d8d,#e01f66) !important;color:#fff !important;border-bottom-right-radius:6px !important;margin-left:auto !important}
-html body .mes[data-is-user="false"] .mes_block{background:#16161f !important;border:1px solid #21212b !important;border-bottom-left-radius:6px !important}
-html body .mes .ch_name{font-size:11px !important;color:#7c7c8a !important;margin-bottom:2px !important}
-html body .mes[data-is-user="true"] .ch_name{text-align:right !important}
-html body .mes .avatar img{border-radius:50% !important;width:34px !important;height:34px !important}
-html body .mes_text p{margin:0 0 6px !important}
-html body .mes_text p:last-child{margin:0 !important}
-html body .mes_buttons,html body .swipe_left,html body .swipe_right{opacity:.45 !important}
+/* message list */
+#chat{padding:14px 12px !important;gap:0 !important}
+.mes{background:none !important;border:none !important;box-shadow:none !important;padding:3px 0 !important;margin:0 !important}
+.mes .mes_block{
+  padding:10px 13px !important;
+  border-radius:18px !important;
+  background:#16161f !important;
+  border:1px solid #21212b !important;
+  color:#e9e9ee !important;
+  font-size:14px !important;
+  line-height:1.45 !important;
+  max-width:78% !important;
+}
+.mes[is_user="true"]{flex-direction:row-reverse !important}
+.mes[is_user="true"] .mes_block{
+  background:linear-gradient(135deg,#ff4d8d,#e01f66) !important;
+  border-color:transparent !important;
+  color:#fff !important;
+  border-bottom-right-radius:6px !important;
+  margin-left:auto !important;
+}
+.mes[is_user="false"] .mes_block{border-bottom-left-radius:6px !important}
+.mes[is_system="true"] .mes_block{
+  background:#101017 !important;
+  border-style:dashed !important;
+  font-style:italic !important;
+  color:#9a9aa8 !important;
+}
 
-html body #send_form{background:#0b0b10 !important;border-top:1px solid #1a1a22 !important;padding:10px 12px 14px !important}
-html body #send_textarea{background:#15151d !important;border:1px solid #23232e !important;border-radius:22px !important;padding:11px 14px !important;color:#eeeef3 !important;font-size:14px !important}
-html body #send_but{background:linear-gradient(135deg,#ff4d8d,#e01f66) !important;border-radius:50% !important;width:34px !important;height:34px !important;border:none !important}
+/* names and timestamps */
+.mes .ch_name{font-size:11px !important;color:#7c7c8a !important;margin-bottom:3px !important;font-weight:500 !important}
+.mes[is_user="true"] .ch_name{justify-content:flex-end !important}
+.mes[is_user="true"] .ch_name .name_text{color:#ffd7e6 !important}
+.mes .timestamp{font-size:10px !important;color:#5c5c6b !important}
+
+/* avatars */
+.mes .avatar img{
+  border-radius:50% !important;
+  width:34px !important;
+  height:34px !important;
+  object-fit:cover !important;
+  border:1px solid #22222c !important;
+}
+
+/* body copy */
+.mes .mes_text p{margin:0 0 6px !important}
+.mes .mes_text p:last-child{margin:0 !important}
+.mes .mes_text em{color:#c9c9d4 !important}
+.mes .mes_text blockquote{
+  border-left:2px solid #ff4d8d !important;
+  margin:6px 0 !important;
+  padding-left:10px !important;
+  color:#b9b9c6 !important;
+}
+.mes .mes_text code{
+  background:#0b0b10 !important;
+  border-radius:5px !important;
+  padding:1px 5px !important;
+  font-size:13px !important;
+}
+
+/* de-clutter */
+.mes .for_checkbox,.mes .del_checkbox{display:none !important}
+.mes_buttons,.mes .swipe_left,.mes .swipe_right{opacity:.35 !important;transition:opacity .15s !important}
+.mes:hover .mes_buttons,.mes:hover .swipe_left,.mes:hover .swipe_right{opacity:1 !important}
+
+/* composer */
+#send_form{
+  background:#0b0b10 !important;
+  border-top:1px solid #1a1a22 !important;
+  padding:10px 12px 14px !important;
+}
+#send_textarea{
+  background:#15151d !important;
+  border:1px solid #23232e !important;
+  border-radius:22px !important;
+  padding:11px 14px !important;
+  color:#eeeef3 !important;
+  font-size:14px !important;
+  line-height:1.4 !important;
+  resize:none !important;
+}
+#send_textarea::placeholder{color:#5e5e6d !important}
+#send_textarea:focus{
+  border-color:#ff4d8d88 !important;
+  box-shadow:0 0 0 3px rgba(255,61,127,.08) !important;
+  outline:none !important;
+}
+#send_but{
+  background:linear-gradient(135deg,#ff4d8d,#e01f66) !important;
+  border-radius:50% !important;
+  width:34px !important;
+  height:34px !important;
+  border:none !important;
+  color:#fff !important;
+}
+#options_button{color:#c9c9d4 !important}
