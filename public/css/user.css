@@ -1,0 +1,22 @@
+html body{background:#08080c !important}
+#bg1,#bg_custom{background-image:none !important;opacity:1 !important}
+#top-bar{background:#08080c !important;border-bottom:1px solid #1a1a22 !important}
+#top-settings-holder .drawer-toggle{background:#15151d !important;border:1px solid #22222c !important;border-radius:11px !important}
+#character_name_pole{font-size:15px !important;font-weight:600 !important;color:#f4f4f7 !important}
+
+html body #chat{max-width:100% !important;padding:14px !important}
+html body .mes{background:none !important;border:none !important;box-shadow:none !important;padding:2px 0 !important;margin:0 !important}
+html body .mes .mes_block{padding:10px 13px !important;border-radius:18px !important;font-size:14px !important;line-height:1.45 !important}
+html body .mes[data-is-user="true"]{flex-direction:row-reverse !important}
+html body .mes[data-is-user="true"] .mes_block{background:linear-gradient(135deg,#ff4d8d,#e01f66) !important;color:#fff !important;border-bottom-right-radius:6px !important;margin-left:auto !important}
+html body .mes[data-is-user="false"] .mes_block{background:#16161f !important;border:1px solid #21212b !important;border-bottom-left-radius:6px !important}
+html body .mes .ch_name{font-size:11px !important;color:#7c7c8a !important;margin-bottom:2px !important}
+html body .mes[data-is-user="true"] .ch_name{text-align:right !important}
+html body .mes .avatar img{border-radius:50% !important;width:34px !important;height:34px !important}
+html body .mes_text p{margin:0 0 6px !important}
+html body .mes_text p:last-child{margin:0 !important}
+html body .mes_buttons,html body .swipe_left,html body .swipe_right{opacity:.45 !important}
+
+html body #send_form{background:#0b0b10 !important;border-top:1px solid #1a1a22 !important;padding:10px 12px 14px !important}
+html body #send_textarea{background:#15151d !important;border:1px solid #23232e !important;border-radius:22px !important;padding:11px 14px !important;color:#eeeef3 !important;font-size:14px !important}
+html body #send_but{background:linear-gradient(135deg,#ff4d8d,#e01f66) !important;border-radius:50% !important;width:34px !important;height:34px !important;border:none !important}
