@@ -475,12 +475,7 @@ function setDnsResolutionOrder() {
         console.warn('Failed to set DNS resolution order. Possibly unsupported in this Node version.');
     }
 }
-/* --- venice shim --- */
-{
-    const { mountVeniceShim } = await import('../venice-shim.mjs');
-    mountVeniceShim(app);
-}
-/* --- end venice shim --- */
+import('../venice-shim.mjs').then(m => m.mountVeniceShim(app)).catch(e => console.error('[venice-shim]', e));
 // User storage module needs to be initialized before starting the server
 initUserStorage(globalThis.DATA_ROOT)
     .then(setDnsResolutionOrder)
