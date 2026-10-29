@@ -1,7 +1,7 @@
 // venice-shim.mjs
 import express from 'express';
 
-const KEY = 'PASTE_YOUR_VENICE_KEY_HERE';
+const KEY = 'VENICE_INFERENCE_KEY_uESc3MG_Kbz9_eS9GXiapfq4_arrmGeiBtA3gr5LMV';
 const DEFAULT_MODEL = 'venice-uncensored-1-2';
 const IMAGE_MODEL = 'flux-dev';
 const TTS_MODEL = 'tts-kokoro';
