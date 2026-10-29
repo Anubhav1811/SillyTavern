@@ -53,14 +53,48 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
 .callbtns{display:flex;gap:22px;align-items:center}
 .cb{width:52px;height:52px;border-radius:50%;background:#1b1b24;border:1px solid #2a2a36;display:grid;place-items:center;color:#d5d5e0;font-size:18px}
 .cb.end{background:#e0263f;border-color:#e0263f;color:#fff;width:62px;height:62px;font-size:20px}
+.sec{padding:4px 2px 0}
+.sec h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:#6a6a7a;margin:18px 0 8px;font-weight:600}
+.row{background:#111118;border:1px solid #1d1d26;border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;justify-content:space-between}
+select,input[type=text]{background:#15151d;border:1px solid #23232e;border-radius:10px;color:#e9e9ee;padding:9px 10px;font:14px inherit;width:100%;max-width:210px}
+input[type=range]{width:100%;accent-color:#ff4d8d}
+.hint{font-size:11.5px;color:#6a6a7a;margin-top:6px;line-height:1.5}
 </style>
 </head>
 <body>
 
 <div id="home">
-  <header><div class="meta"><div class="nm" style="font-size:19px">Companions</div></div><div class="btn" id="addBtn">+</div></header>
+  <header><div class="meta"><div class="nm" style="font-size:19px">Companions</div></div><div class="btn" id="setBtn">⚙</div><div class="btn" id="addBtn">+</div></header>
   <div id="list"></div>
   <div id="empty" class="hide">No characters yet.<br>Tap + and paste a card.</div>
+</div>
+
+<div id="settings" class="hide" style="display:flex;flex-direction:column;height:100%">
+  <header><div class="btn" id="setBack">‹</div><div class="meta"><div class="nm">Settings</div></div></header>
+  <div style="flex:1;overflow-y:auto;padding:14px 14px 40px">
+    <div class="sec">
+      <h3>Chat model</h3>
+      <div class="row"><select id="sModel"></select></div>
+      <div class="hint" id="mHint">Uncensored roleplay models work best here.</div>
+
+      <h3>Temperature</h3>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:8px">
+        <input type="range" id="sTemp" min="0" max="1.5" step="0.05">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;color:#6a6a7a"><span>focused</span><span id="tVal">0.9</span><span>wild</span></div>
+      </div>
+
+      <h3>Voice</h3>
+      <div class="row"><select id="sVoice"></select></div>
+      <div class="hint">Kokoro voices. Try a few — they differ a lot.</div>
+
+      <h3>Speak replies automatically</h3>
+      <div class="row"><span>Auto-speak</span><input type="checkbox" id="sSpeak" style="width:20px;height:20px;accent-color:#ff4d8d"></div>
+
+      <h3>Image model</h3>
+      <div class="row"><select id="sImage"></select></div>
+      <div class="hint">Used by the ▣ button in a chat.</div>
+    </div>
+  </div>
 </div>
 
 <div id="chatView" class="hide" style="display:flex;flex-direction:column;height:100%">
@@ -98,13 +132,32 @@ footer{display:flex;gap:8px;padding:10px 12px calc(12px + env(safe-area-inset-bo
 const KC='candy.chars',KH='candy.hist',KS='candy.settings';
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
 const save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let chars=load(KC,[]),hist=load(KH,{}),settings=load(KS,{model:'venice-uncensored-1-2',speak:false});
+let chars=load(KC,[]),hist=load(KH,{}),settings=load(KS,{model:'venice-uncensored-1-2',speak:false,temp:0.9,voice:'af_bella',image:'flux-dev'});
 let current=null,audio=null,inCall=false,muted=false,loopTimer=null,secs=0,tick=null;
 const G=['linear-gradient(135deg,#ff4d8d,#8a1f4d)','linear-gradient(135deg,#7a5cff,#2b1a5c)','linear-gradient(135deg,#3ddc84,#12543a)','linear-gradient(135deg,#ffa53d,#8a4d12)','linear-gradient(135deg,#4db8ff,#124a7a)'];
+const VOICES=['af_bella','af_nicole','af_sarah','af_sky','am_adam','am_michael','bf_emma','bf_isabella','bm_george','bm_lewis'];
 const grad=i=>G[i%G.length];
 const $=id=>document.getElementById(id);
-
 for(let i=0;i<26;i++){const b=document.createElement('i');b.style.animationDelay=(i*.055)+'s';$('wave').appendChild(b);}
+
+function fill(sel,arr,val){sel.innerHTML='';arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});if(val)sel.value=val;}
+
+async function loadModels(){
+  try{
+    const [t,i]=await Promise.all([fetch('/candy/models?type=text').then(r=>r.json()),fetch('/candy/models?type=image').then(r=>r.json())]);
+    const tIds=(t.ids||[]).filter(x=>/uncensor|role-?play|venice/i.test(x));
+    fill($('sModel'),tIds.length?tIds:(t.ids||[]),settings.model);
+    fill($('sImage'),i.ids||[],settings.image);
+  }catch{ $('mHint').textContent='Could not load model list — check the key in venice-shim.mjs.'; }
+}
+
+function openSettings(){
+  $('home').classList.add('hide'); $('settings').classList.remove('hide');
+  fill($('sVoice'),VOICES,settings.voice);
+  $('sTemp').value=settings.temp; $('tVal').textContent=settings.temp;
+  $('sSpeak').checked=!!settings.speak;
+  loadModels();
+}
 
 function renderHome(){
   $('list').innerHTML=''; $('empty').classList.toggle('hide',chars.length>0);
@@ -162,7 +215,7 @@ async function send(){
   $('thread').appendChild(ty); $('thread').scrollTop=$('thread').scrollHeight;
   let acc='',bubble=null;
   try{
-    const r=await fetch('/candy/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:settings.model,messages:buildMessages(c)})});
+    const r=await fetch('/candy/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:settings.model,temperature:settings.temp,messages:buildMessages(c)})});
     if(!r.ok)throw new Error(await r.text());
     const rd=r.body.getReader(),dec=new TextDecoder();
     while(true){
@@ -171,145 +224,4 @@ async function send(){
         if(!line.startsWith('data: '))continue;
         const p=line.slice(6).trim(); if(p==='[DONE]')continue;
         try{const j=JSON.parse(p);const d=j.choices?.[0]?.delta?.content;
-          if(d){acc+=d;if(!bubble){ty.remove();bubble=addBubble('her','',false);}bubble.firstChild?bubble.firstChild.textContent=acc:bubble.textContent=acc;$('thread').scrollTop=$('thread').scrollHeight;}
-        }catch{}
-      }
-    }
-  }catch(e){ty.remove();if(!bubble)addBubble('her','⚠ '+e.message.slice(0,140));return '';}
-  ty.remove();
-  if(acc){push(c.name,'assistant',acc);if(settings.speak||inCall)speak(acc);}
-  return acc;
-}
-
-async function speak(text){
-  try{
-    const r=await fetch('/candy/speech',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
-    if(!r.ok)throw new Error('tts '+r.status);
-    const b=await r.blob();
-    if(audio)audio.pause();
-    audio=new Audio(URL.createObjectURL(b));
-    audio.onplay=()=>$('wave').classList.add('live');
-    audio.onended=()=>{ if(!inCall)$('wave').classList.remove('live'); };
-    await audio.play();
-    return new Promise(r=>{audio.onended=r;audio.onerror=r;});
-  }catch(e){ console.warn(e.message); }
-}
-
-async function makeImage(){
-  if(current===null)return; const c=chars[current];
-  const last=[...(hist[c.name]||[])].reverse().find(m=>m.role==='assistant');
-  if(!last)return;
-  const ty=document.createElement('div'); ty.className='typing'; ty.innerHTML='<i></i><i></i><i></i>';
-  $('thread').appendChild(ty); $('thread').scrollTop=$('thread').scrollHeight;
-  try{
-    const r=await fetch('/candy/image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:last.content.slice(0,400)})});
-    const j=await r.json(); ty.remove();
-    if(!j.images)throw new Error(j.error||'failed');
-    const src='data:image/png;base64,'+j.images[0];
-    addBubble('assistant','[img]'+src); push(c.name,'assistant','[img]'+src);
-  }catch(e){ty.remove();addBubble('her','⚠ '+e.message.slice(0,140));}
-}
-
-// --- speech capture with silence detection ---
-function recordChunk(){
-  return new Promise(async resolve=>{
-    let stream;
-    try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
-    catch{ $('state').textContent='mic blocked'; resolve(''); return; }
-
-    const ctx=new (window.AudioContext||window.webkitAudioContext)();
-    const an=ctx.createAnalyser();
-    an.fftSize=1024;
-    ctx.createMediaStreamSource(stream).connect(an);
-    const buf=new Uint8Array(an.fftSize);
-
-    const rec=new MediaRecorder(stream,{mimeType:'audio/webm'});
-    const chunks=[]; rec.ondataavailable=e=>chunks.push(e.data);
-
-    const t0=Date.now();
-    let spoke=false, quiet=0, closed=false;
-    const stopNow=()=>{ if(closed)return; closed=true; if(rec.state==='recording')rec.stop(); };
-
-    const iv=setInterval(()=>{
-      an.getByteTimeDomainData(buf);
-      let sum=0;
-      for(let i=0;i<buf.length;i++){ const x=(buf[i]-128)/128; sum+=x*x; }
-      const rms=Math.sqrt(sum/buf.length);
-      if(rms>0.02){ spoke=true; quiet=0; }
-      else if(spoke){ quiet+=100; }
-      const el=Date.now()-t0;
-      if(spoke && quiet>700 && el>1200) stopNow();
-      if(el>12000) stopNow();
-    },100);
-
-    rec.onstop=async()=>{
-      clearInterval(iv);
-      stream.getTracks().forEach(t=>t.stop());
-      try{ await ctx.close(); }catch{}
-      const blob=new Blob(chunks,{type:'audio/webm'});
-      const fd=new FormData(); fd.append('file','v.webm'); fd.append('model','whisper-large-v3');
-      try{
-        const r=await fetch('/candy/transcribe',{method:'POST',body:fd});
-        const t=await r.text();
-        try{ const j=JSON.parse(t); resolve(j.text||(j.raw?JSON.parse(j.raw).text:'')||''); }
-        catch{ resolve(''); }
-      }catch{ resolve(''); }
-    };
-
-    rec.start();
-  });
-}
-
-async function callTurn(){
-  if(!inCall)return;
-  if(muted){ $('state').textContent='muted'; await new Promise(r=>setTimeout(r,1200)); }
-  else{
-    $('state').textContent='listening…';
-    const text=await recordChunk();
-    if(!inCall)return;
-    if(text.trim()){
-      $('inp').value=text;
-      $('state').textContent='thinking…';
-      await send();
-    }
-  }
-  if(!inCall)return;
-  $('state').textContent='';
-  loopTimer=setTimeout(callTurn,450);
-}
-
-function startCall(){
-  if(current===null)return;
-  inCall=true; muted=false; secs=0;
-  $('call').classList.add('on');
-  $('timer').textContent='00:00';
-  clearInterval(tick);
-  tick=setInterval(()=>{secs++;$('timer').textContent=String(Math.floor(secs/60)).padStart(2,'0')+':'+String(secs%60).padStart(2,'0');},1000);
-  callTurn();
-}
-function endCall(){
-  inCall=false;
-  clearTimeout(loopTimer); clearInterval(tick);
-  if(audio){audio.pause();audio=null;}
-  $('wave').classList.remove('live');
-  $('call').classList.remove('on');
-}
-
-$('addBtn').onclick=()=>{
-  const raw=prompt('Paste character JSON:\n{"name":"Aria","persona":"23, warm, teasing.","scenario":"She is your neighbour."}');
-  if(!raw)return;
-  try{const c=JSON.parse(raw);if(!c.name)throw 0;chars.push(c);save(KC,chars);renderHome();}catch{alert('Bad JSON')}
-};
-$('backBtn').onclick=()=>{ $('chatView').classList.add('hide'); $('home').classList.remove('hide'); renderHome(); current=null; };
-$('sendBtn').onclick=send;
-$('imgBtn').onclick=makeImage;
-$('callBtn').onclick=startCall;
-$('endBtn').onclick=endCall;
-$('muteBtn').onclick=()=>{ muted=!muted; $('muteBtn').style.background=muted?'#e0263f':''; };
-$('spk2').onclick=()=>{ if(audio){ if(audio.paused)audio.play(); else audio.pause(); } };
-$('inp').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();send();} });
-
-renderHome();
-</script>
-</body>
-</html>
+          if(d){acc+=d;if(!bubble){ty.remove();bubble=addBubble('her','',false);}bubble.firstChild?bubble.firstChild.textContent=acc:bubble.textContent=acc;$
